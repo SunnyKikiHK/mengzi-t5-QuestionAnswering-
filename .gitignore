@@ -1,1 +1,3 @@
 /mengzi-t5-base/data/
+/mengzi-t5-base/question.ipynb
+*.pyc
