@@ -78,3 +78,14 @@ def collote_fn(batch_samples: list, model: T5ForConditionalGeneration, tokenizer
     batch_data['labels'] = labels
     return batch_data
 
+def save_checkpoint(model, epoch, output_dir, recent_checkpoints, max_keep=3):
+    ckpt_path = output_dir / f"ckpt-epoch{epoch}"
+
+    print(f"Saving checkpoint to {ckpt_path}")
+    recent_checkpoints.append(ckpt_path)
+    torch.save(model.state_dict())
+
+    if len(recent_checkpoints > max_keep):
+        oldest = recent_checkpoints.pop(0)
+
+        oldest.unlink(missing_ok=True)

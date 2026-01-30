@@ -1,5 +1,7 @@
 transformers
+evaluate 
 torch
 torchvision
 torchaudio
 sentencepiece
+wandb
