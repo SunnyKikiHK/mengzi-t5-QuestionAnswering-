@@ -35,15 +35,27 @@ def get_data_stats(data: list, tokenizer: T5Tokenizer) -> dict:
         }
         
 
-def exceed_length_threshold(obj):
+def exceed_length_threshold(obj, tokenizer: T5Tokenizer):
+    """
+    Check if the input and answer length exceed the threshold.
+    Args:
+        obj: The object to check.
+        tokenizer: The tokenizer to use.
+    Returns:
+        True if the input and answer length exceed the threshold, False otherwise.
+    """
     if isinstance(obj['answer'], list):
         for answer in obj['answer']:
             prompt_input = f"{PROMPT_Q_TEMPLATE}{obj['question']} {PROMPT_C_TEMPALTE}{obj['context']}"
-            if len(prompt_input) > MAX_INPUT_LENGTH or len(answer) > MAX_TARGET_LENGTH:
+            input_len = len(tokenizer.encode(prompt_input))
+            ans_len = len(tokenizer.encode(answer))
+            if input_len > MAX_INPUT_LENGTH or ans_len > MAX_TARGET_LENGTH:
                 return True
     else:
         prompt_input = f"{PROMPT_Q_TEMPLATE}{obj['question']} {PROMPT_C_TEMPALTE}{obj['context']}"
-        if len(prompt_input) > MAX_INPUT_LENGTH or len(obj['answer']) > MAX_TARGET_LENGTH:
+        input_len = len(tokenizer.encode(prompt_input))
+        ans_len = len(tokenizer.encode(obj['answer']))
+        if input_len > MAX_INPUT_LENGTH or ans_len > MAX_TARGET_LENGTH:
             return True
     return False 
 
@@ -78,9 +90,12 @@ def collote_train_fn(batch_samples: list, model: T5ForConditionalGeneration, tok
         return_tensors="pt"
     )["input_ids"] # (bsz, seq_len)
     batch_data['decoder_input_ids'] = model.prepare_decoder_input_ids_from_labels(labels)
-    end_token_index = torch.where(labels == tokenizer.eos_token_id)[1]
-    for i, end_i in enumerate(end_token_index):
-        labels[i][end_i+1:] = -100 #Ignored value for cross entropy
+    # way 1
+    labels[labels == tokenizer.pad_token_id] = -100
+    # way 2
+    # end_token_index = torch.where(labels == tokenizer.eos_token_id)[1]
+    # for i, end_i in enumerate(end_token_index):
+    #     labels[i][end_i+1:] = -100 #Ignored value for cross entropy
     batch_data['labels'] = labels
     return batch_data
 
@@ -130,14 +145,15 @@ def collote_valid_fn(batch_samples: list, model, tokenizer) -> dict:
     
     labels = labels_encoding.input_ids
 
+    # creates the shifted inputs: <pad> token1 token2 ...
+    batch_data['decoder_input_ids'] = model.prepare_decoder_input_ids_from_labels(labels)
+
     # Replace padding token id with -100 so loss is ignored there
     labels[labels == tokenizer.pad_token_id] = -100
     
     # Add to batch
     batch_data['labels'] = labels
     
-    batch_data['decoder_input_ids'] = model.prepare_decoder_input_ids_from_labels(labels)
-
     # Attach Raw Answers for valid_loop 
     # This is the key key that valid_loop will .pop()
     batch_data['answer'] = batch_all_answers_raw
