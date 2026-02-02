@@ -171,3 +171,61 @@ def save_checkpoint(model, epoch, output_dir, recent_checkpoints, max_keep=3):
         oldest = recent_checkpoints.pop(0)
 
         oldest.unlink(missing_ok=True)
+
+def merge_qa_dataset(data, output_file_path):
+    """
+    Merges JSON entries with the same Context and Question into a single entry
+    with a list of answers. Re-indexes IDs sequentially.
+    """
+    # Grouping Logic
+    # We use a dictionary to group items.
+    # Key: Tuple of (context, question) -> This ensures unique QA pairs
+    # Value: List of answers
+    grouped_data = {}
+
+    print(f"Processing {len(data)} items...")
+
+    for item in data:
+        context = item.get('context', '').strip()
+        question = item.get('question', '').strip()
+        answer = item.get('answer', '')
+        
+        # Create a unique key for this specific question context
+        key = (context, question)
+
+        if key not in grouped_data:
+            grouped_data[key] = []
+
+        # Handle cases where input answer might already be a list or a string
+        if isinstance(answer, list):
+            grouped_data[key].extend(answer)
+        else:
+            grouped_data[key].append(answer)
+
+    # 3. Reconstruct the List with new IDs
+    new_json_data = []
+    new_id_counter = 0
+
+    for (context, question), answers in grouped_data.items():
+        # Remove duplicate answers if you want unique references only
+        answers = list(set(answers)) 
+        
+        entry = {
+            "id": new_id_counter,
+            "context": context,
+            "question": question,
+            "answer": answers  # This is now a list ["Ans1", "Ans2"]
+        }
+        new_json_data.append(entry)
+        new_id_counter += 1
+
+    # Save to new file
+    with open(output_file_path, 'w', encoding='utf-8') as f:
+        for obj in tqdm(new_json_data, desc="Writing to JSON file"):
+            # ensure_ascii=False is crucial for Chinese characters to be readable
+            f.write(json.dumps(obj, ensure_ascii=False) + "\n")
+
+    print(f"Success! Merged data saved to {output_file_path}")
+    print(f"Original count: {len(data)} -> New count: {len(new_json_data)}")
+
+    return new_json_data
